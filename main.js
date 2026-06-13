@@ -213,12 +213,12 @@ OBR.onReady(async () => {
         OBR.contextMenu.create({
             id: `${EXTENSION_ID}/assign-owner`,
             icons: [{
-                icon: "https://YOUR-DOMAIN.example/icon.svg",
+                icon: "https://mehiskasonen.github.io/chromodynamic-fog/icon.svg",
                 label: "Assign vision owner",
                 filter: { every: [{ key: "layer", value: "CHARACTER" }] },
             }],
             embed: {
-                url: `https://YOUR-DOMAIN.example/assign.html`,
+                url: `https://mehiskasonen.github.io/chromodynamic-fog/assign.html`,
                 height: 60 + everyone.length * 32,
             },
         });
