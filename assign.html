@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>Assign Vision Owner</title>
+    <style>
+        :root { color-scheme: dark; }
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            margin: 0; padding: 10px;
+            background: #1c1b22; color: #eee; font-size: 13px;
+        }
+        h2 { margin: 0 0 10px; font-size: 12px; opacity: 0.6; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+        button {
+            display: flex; align-items: center; gap: 10px;
+            width: 100%; padding: 8px 10px; margin-bottom: 4px;
+            background: #2a2933; border: 1px solid #3a3946;
+            color: #eee; border-radius: 6px;
+            text-align: left; cursor: pointer; font-size: 13px;
+        }
+        button:hover { background: #353443; }
+        .swatch { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+        .none { background: #3a2a2a; border-color: #5a3a3a; margin-top: 8px; }
+        .none:hover { background: #4a3535; }
+        .status { margin-top: 8px; opacity: 0.6; font-size: 11px; min-height: 1em; }
+        .empty { opacity: 0.6; font-style: italic; }
+    </style>
+</head>
+<body>
+<h2>Assign vision to</h2>
+<div id="players">Loading…</div>
+<div class="status" id="status"></div>
+
+<script type="module">
+    import OBR from "https://esm.sh/@owlbear-rodeo/sdk@3";
+
+    const EXTENSION_ID  = "com.example.chromofog";
+    const OWNER_META_KEY = `${EXTENSION_ID}/ownerId`;
+
+    OBR.onReady(async () => {
+        const playersEl = document.getElementById("players");
+        const statusEl  = document.getElementById("status");
+
+        // Which tokens are we acting on? The context-menu embed inherits
+        // the player's current selection.
+        const selection = await OBR.player.getSelection();
+        if (!selection || selection.length === 0) {
+            playersEl.innerHTML = `<div class="empty">No tokens selected.</div>`;
+            return;
+        }
+
+        // Build the player roster: me + everyone else in the party.
+        const myId    = await OBR.player.getId();
+        const myName  = await OBR.player.getName();
+        const myColor = await OBR.player.getColor();
+        const party   = await OBR.party.getPlayers();
+
+        const roster = [
+            { id: myId, name: `${myName} (you)`, color: myColor },
+            ...party.map(p => ({ id: p.id, name: p.name, color: p.color })),
+        ];
+
+        // Render one button per player + a "clear" option.
+        playersEl.innerHTML =
+            roster.map(p => `
+          <button data-id="${p.id}">
+            <span class="swatch" style="background:${p.color}"></span>
+            <span>${escapeHtml(p.name)}</span>
+          </button>
+        `).join("") +
+            `<button class="none" data-id="">Remove ownership</button>`;
+
+        playersEl.addEventListener("click", async (e) => {
+            const btn = e.target.closest("button");
+            if (!btn) return;
+            const ownerId = btn.dataset.id || null;
+
+            await OBR.scene.items.updateItems(selection, (items) => {
+                for (const item of items) {
+                    if (ownerId) item.metadata[OWNER_META_KEY] = ownerId;
+                    else         delete item.metadata[OWNER_META_KEY];
+                }
+            });
+
+            statusEl.textContent = ownerId
+                ? `Assigned ${selection.length} token(s).`
+                : `Cleared ownership.`;
+        });
+    });
+
+    function escapeHtml(s) {
+        return s.replace(/[&<>"']/g, c => ({
+            "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+        }[c]));
+    }
+</script>
+</body>
+</html>
