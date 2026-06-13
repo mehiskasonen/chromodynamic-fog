@@ -212,7 +212,7 @@ OBR.onReady(async () => {
         }],
         embed: {
             url: `https://mehiskasonen.github.io/chromodynamic-fog/assign.html`,
-            height: 60 + everyone.length * 32,
+            height: 320,
         },
     });
 });
