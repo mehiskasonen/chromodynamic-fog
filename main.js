@@ -40,6 +40,7 @@
 import OBR, {
     buildLight,
     isImage, // tokens in OBR are typically Image items on the CHARACTER layer
+    isLight,
 } from "https://esm.sh/@owlbear-rodeo/sdk@3";
 
 /* ----- Configuration -------------------------------------------------------*/
@@ -56,10 +57,6 @@ let myPlayerId = null;       // OBR.player.getId() result for THIS client
 let myRole = "PLAYER";       // "GM" or "PLAYER"
 let gridDpi = 150;           // pixels per grid square, cached from OBR.scene.grid
 let visionRadiusPx = 0;      // computed from grid dpi * DEFAULT_VISION_GRID_SQUARES
-
-// Map<tokenId, lightItemId> — tracks which local light corresponds to which
-// shared token, so we can update/remove cleanly. Lives only in this tab.
-const tokenToLightId = new Map();
 
 /* ----- Bootstrapping -------------------------------------------------------*/
 
@@ -129,68 +126,126 @@ function isOwnedByMe(item) {
 
 /* ----- Light reconciliation -----------------------------------------------*/
 
+// Per-token state: lightId we created locally, plus a hash of the parameters
+// we built it with. The hash lets us skip work when nothing actually changed
+// (token movement is handled automatically by attachedTo and shouldn't cause
+// a rebuild).
+const tokenToLight = new Map();   // tokenId -> { lightId, paramsHash }
+
 /**
- * Given the current full shared-scene items list, make sure the LOCAL scene
- * has exactly one light per token-I-own, positioned correctly, and zero
- * lights for anything else.
- *
- * Strategy: diff against tokenToLightId. This runs on every onChange tick,
- * so it must be cheap and idempotent.
+ * Find the OBR Light item (from Dynamic Fog or any other source) that's
+ * attached to the given token. Dynamic Fog v1.1 creates exactly one Light
+ * per "Add Light" action, so a single .find() is enough.
+ */
+function findAttachedLight(allItems, tokenId) {
+    return allItems.find(it => isLight(it) && it.attachedTo === tokenId);
+}
+
+/**
+ * Extract the visual parameters from a shared Light item. These are the
+ * exact knobs the Dynamic Fog "Light Settings" panel manipulates.
+ * Any property that's undefined on the source light is left out so the
+ * builder uses the SDK default.
+ */
+function extractParams(light) {
+    return {
+        attenuationRadius: light.attenuationRadius,
+        sourceRadius:      light.sourceRadius,
+        falloff:           light.falloff,
+        innerAngle:        light.innerAngle,
+        outerAngle:        light.outerAngle,
+        lightType:         light.lightType,
+    };
+}
+
+/**
+ * Used when a token has no Dynamic Fog light attached. Keeps the extension
+ * functional even if you forget to add a light via Dynamic Fog's UI.
+ */
+function defaultParams() {
+    return {
+        attenuationRadius: visionRadiusPx,
+        sourceRadius:      gridDpi * 0.5,
+        falloff:           1,
+    };
+}
+
+/**
+ * Build a local OBR Light from a params object. Properties not present in
+ * the params (e.g. innerAngle on a full-circle light) are simply omitted,
+ * leaving the SDK to apply defaults.
+ */
+function buildLocalLight(token, params) {
+    const b = buildLight()
+        .position(token.position)
+        .attachedTo(token.id)
+        .metadata({ [LIGHT_TAG_KEY]: token.id })
+        .disableAttachmentBehavior(["ROTATION"]);
+
+    if (typeof params.attenuationRadius === "number") b.attenuationRadius(params.attenuationRadius);
+    if (typeof params.sourceRadius      === "number") b.sourceRadius(params.sourceRadius);
+    if (typeof params.falloff           === "number") b.falloff(params.falloff);
+    if (typeof params.innerAngle        === "number") b.innerAngle(params.innerAngle);
+    if (typeof params.outerAngle        === "number") b.outerAngle(params.outerAngle);
+    if (params.lightType)                              b.lightType(params.lightType);
+
+    return b.build();
+}
+
+/**
+ * Cheap stable hash so we can detect parameter changes between onChange ticks
+ * without diffing every field by hand.
+ */
+function paramsHash(p) {
+    return JSON.stringify(p);
+}
+
+/**
+ * Reconcile local vision lights against the current shared scene state.
+ * Runs on every onChange. Position updates require no work (attachedTo
+ * handles that). We only delete + recreate when ownership or visual params
+ * change.
  */
 async function reconcileLights(allItems) {
-    const myTokens = allItems.filter(isOwnedByMe);
-    const myTokenIds = new Set(myTokens.map((t) => t.id));
+    const myTokens   = allItems.filter(isOwnedByMe);
+    const myTokenIds = new Set(myTokens.map(t => t.id));
 
-    // --- 1. Remove lights for tokens we no longer own / that vanished -------
-    const orphanLightIds = [];
-    for (const [tokenId, lightId] of tokenToLightId.entries()) {
+    const toDelete = [];
+    const toAdd    = [];
+
+    // 1. Drop lights for tokens we no longer own.
+    for (const [tokenId, entry] of [...tokenToLight.entries()]) {
         if (!myTokenIds.has(tokenId)) {
-            orphanLightIds.push(lightId);
-            tokenToLightId.delete(tokenId);
+            toDelete.push(entry.lightId);
+            tokenToLight.delete(tokenId);
         }
     }
-    if (orphanLightIds.length) {
-        await OBR.scene.local.deleteItems(orphanLightIds);
-    }
 
-    // --- 2. Add lights for newly-owned tokens -------------------------------
-    // Because lights are .attachedTo() the token, OBR will move them with the
-    // token automatically — we do NOT need to manually rewrite light.position
-    // on every onChange tick when only position changed. That's the engine's
-    // job. We only re-add when ownership/membership changes.
-    const newLights = [];
+    // 2. For each token we own: figure out the params we WANT, compare against
+    //    the params our existing local light WAS built with, rebuild on mismatch.
     for (const token of myTokens) {
-        if (tokenToLightId.has(token.id)) continue;
+        const dfLight = findAttachedLight(allItems, token.id);
+        const wanted  = dfLight ? extractParams(dfLight) : defaultParams();
+        const hash    = paramsHash(wanted);
 
-        const light = buildLight()
-            .position(token.position)
-            .attenuationRadius(visionRadiusPx)
-            // sourceRadius controls the "soft" inner circle — anything inside it
-            // is fully revealed with no falloff. A small value gives a sharp edge.
-            .sourceRadius(gridDpi * 0.5)
-            .falloff(1)               // 0 = hard edge, 1 = smooth gradient
-            .attachedTo(token.id)     // <-- this is what makes the light follow
-            .metadata({ [LIGHT_TAG_KEY]: token.id })
-            // Disable user interaction so players can't accidentally drag the
-            // invisible light off their own token.
-            .disableAttachmentBehavior(["ROTATION"])
-            .build();
+        const existing = tokenToLight.get(token.id);
+        if (existing && existing.paramsHash === hash) continue;
 
-        tokenToLightId.set(token.id, light.id);
-        newLights.push(light);
+        if (existing) toDelete.push(existing.lightId);
+
+        const light = buildLocalLight(token, wanted);
+        tokenToLight.set(token.id, { lightId: light.id, paramsHash: hash });
+        toAdd.push(light);
     }
-    if (newLights.length) {
-        // CRITICAL: addItems on OBR.scene.local — NOT OBR.scene.items.
-        // This is the one-line difference between "shared party fog" and
-        // "private per-player vision".
-        await OBR.scene.local.addItems(newLights);
-    }
+
+    if (toDelete.length) await OBR.scene.local.deleteItems(toDelete);
+    if (toAdd.length)    await OBR.scene.local.addItems(toAdd);
 }
 
 async function clearAllLocalLights() {
-    const ids = Array.from(tokenToLightId.values());
+    const ids = Array.from(tokenToLight.values()).map(e => e.lightId);
     if (ids.length) await OBR.scene.local.deleteItems(ids);
-    tokenToLightId.clear();
+    tokenToLight.clear();
 }
 
 /* ----- Optional: context-menu hook to assign explicit ownership -----------
