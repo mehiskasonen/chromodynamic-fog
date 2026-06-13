@@ -5,12 +5,12 @@
   "author": "Mehis Kasonen",
   "version": "1.0.0",
   "license": "MIT",
-  "background": "https://YOUR-DOMAIN.example/background.html",
-  "icon": "https://YOUR-DOMAIN.example/icon.svg",
+  "background": "https://mehiskasonen.github.io/chromodynamic-fog/background.html",
+  "icon": "https://mehiskasonen.github.io/chromodynamic-fog/icon.svg",
   "action": {
     "title": "Chromodynamic Fog",
     "icon": "https://YOUR-DOMAIN.example/icon.svg",
-    "url": "https://YOUR-DOMAIN.example/background.html",
+    "url": "https://mehiskasonen.github.io/chromodynamic-fog/background.html",
     "height": 240,
     "width": 320
   }
