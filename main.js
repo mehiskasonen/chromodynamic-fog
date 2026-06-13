@@ -216,7 +216,4 @@ OBR.onReady(async () => {
                 height: 60 + everyone.length * 32,
             },
         });
-    });
-    await refreshMenu();
-    OBR.party.onChange(refreshMenu);
 });
