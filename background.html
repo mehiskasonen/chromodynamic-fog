@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>Chromodynamic Fog — background</title>
+</head>
+<body>
+<!--
+  This page runs as a hidden iframe inside Owlbear Rodeo.
+  There is nothing visible here on purpose: all output is rendered
+  onto the OBR canvas via the SDK, not into this DOM.
+
+  Because each player loads their own iframe, every player runs
+  their own independent copy of main.js. That isolation is what
+  makes per-player vision possible — nothing about Player A's
+  runtime is reachable from Player B's runtime.
+-->
+<script type="module" src="./main.js"></script>
+</body>
+</html>
