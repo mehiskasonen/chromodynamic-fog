@@ -1,17 +1,6 @@
 {
-  "manifest": "1.0.0",
-  "title": "Chromodynamic Fog",
-  "description": "Per-player line of sight. Each player sees their own vision; nothing merges into a shared party view.",
-  "author": "Mehis Kasonen",
+  "name": "Chromodynamic Fog",
   "version": "1.0.0",
-  "license": "MIT",
-  "background": "https://mehiskasonen.github.io/chromodynamic-fog/background.html",
-  "icon": "https://mehiskasonen.github.io/chromodynamic-fog/icon.svg",
-  "action": {
-    "title": "Chromodynamic Fog",
-    "icon": "https://mehiskasonen.github.io/chromodynamic-fog/icon.svg",
-    "url": "https://mehiskasonen.github.io/chromodynamic-fog/background.html",
-    "height": 240,
-    "width": 320
-  }
+  "manifest_version": 1,
+  "background_url": "https://mehiskasonen.github.io/chromodynamic-fog/background.html"
 }
