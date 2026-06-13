@@ -203,17 +203,16 @@ async function clearAllLocalLights() {
 
 OBR.onReady(async () => {
     if ((await OBR.player.getRole()) !== "GM") return;
-
-        OBR.contextMenu.create({
-            id: `${EXTENSION_ID}/assign-owner`,
-            icons: [{
-                icon: "https://mehiskasonen.github.io/chromodynamic-fog/icon.svg",
-                label: "Assign vision owner",
-                filter: { every: [{ key: "layer", value: "CHARACTER" }] },
-            }],
-            embed: {
-                url: `https://mehiskasonen.github.io/chromodynamic-fog/assign.html`,
-                height: 60 + everyone.length * 32,
-            },
-        });
+    OBR.contextMenu.create({
+        id: `${EXTENSION_ID}/assign-owner`,
+        icons: [{
+            icon: "https://mehiskasonen.github.io/chromodynamic-fog/icon.svg",
+            label: "Assign vision owner",
+            filter: { every: [{ key: "layer", value: "CHARACTER" }] },
+        }],
+        embed: {
+            url: `https://mehiskasonen.github.io/chromodynamic-fog/assign.html`,
+            height: 60 + everyone.length * 32,
+        },
+    });
 });
