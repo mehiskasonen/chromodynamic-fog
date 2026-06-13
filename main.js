@@ -204,12 +204,6 @@ async function clearAllLocalLights() {
 OBR.onReady(async () => {
     if ((await OBR.player.getRole()) !== "GM") return;
 
-    // Build the list of players once; refresh it if party changes.
-    const refreshMenu = async () => {
-        const party = await OBR.party.getPlayers();
-        const me = await OBR.player.getId();
-        const everyone = [{ id: me, name: "(me — GM)" }, ...party];
-
         OBR.contextMenu.create({
             id: `${EXTENSION_ID}/assign-owner`,
             icons: [{
