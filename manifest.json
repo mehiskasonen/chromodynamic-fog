@@ -9,7 +9,7 @@
   "icon": "https://mehiskasonen.github.io/chromodynamic-fog/icon.svg",
   "action": {
     "title": "Chromodynamic Fog",
-    "icon": "https://YOUR-DOMAIN.example/icon.svg",
+    "icon": "https://mehiskasonen.github.io/chromodynamic-fog/icon.svg",
     "url": "https://mehiskasonen.github.io/chromodynamic-fog/background.html",
     "height": 240,
     "width": 320
