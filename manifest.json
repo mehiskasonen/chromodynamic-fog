@@ -2,5 +2,12 @@
   "name": "Chromodynamic Fog",
   "version": "1.0.0",
   "manifest_version": 1,
-  "background_url": "https://mehiskasonen.github.io/chromodynamic-fog/background.html"
-}
+  "background_url": "https://mehiskasonen.github.io/chromodynamic-fog/background.html",
+  "action": {
+    "title": "GM Vision",
+    "icon": "https://mehiskasonen.github.io/chromodynamic-fog/capture.svg",
+    "popover": "https://mehiskasonen.github.io/chromodynamic-fog/view.html",
+    "height": 280,
+    "width": 240
+  }
+},
