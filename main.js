@@ -133,15 +133,6 @@ function isOwnedByMe(item) {
 const tokenToLight = new Map();   // tokenId -> { lightId, paramsHash }
 
 /**
- * Find the OBR Light item (from Dynamic Fog or any other source) that's
- * attached to the given token. Dynamic Fog v1.1 creates exactly one Light
- * per "Add Light" action, so a single .find() is enough.
- */
-function findAttachedLight(allItems, tokenId) {
-    return allItems.find(it => isLight(it) && it.attachedTo === tokenId);
-}
-
-/**
  * Used when a token has no Dynamic Fog light attached. Keeps the extension
  * functional even if you forget to add a light via Dynamic Fog's UI.
  */
@@ -227,7 +218,6 @@ async function reconcileLights(allItems) {
     // 2. For each token we own: figure out the params we WANT, compare against
     //    the params our existing local light WAS built with, rebuild on mismatch.
     for (const token of myTokens) {
-        const dfLight = findAttachedLight(allItems, token.id);
         const wanted  = paramsForToken(token);
         const hash    = paramsHash(wanted);
 
