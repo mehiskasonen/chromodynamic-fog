@@ -80,6 +80,15 @@ OBR.onReady(async () => {
         await clearAllLocalLights();
         if (ready) await initSceneState();
     });
+
+    // 4. GM viewing-mode listener. LOCAL-scoped broadcasts stay on this
+    //    client, so players never see or receive these messages.
+    if (myRole === "GM") {
+        OBR.broadcast.onMessage(`${EXTENSION_ID}/viewMode`, async (event) => {
+            gmViewMode = event.data;
+            await recomputeLocalVision();
+        });
+    }
 });
 
 async function initSceneState() {
