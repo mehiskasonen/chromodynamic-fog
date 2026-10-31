@@ -300,11 +300,7 @@ OBR.onReady(async () => {
     OBR.contextMenu.create({
         id: `${EXTENSION_ID}/capture-light`,
         icons: [{
-            icon: "data:image/svg+xml;utf8," + encodeURIComponent(
-                `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                   <rect x="3" y="11" width="18" height="11" rx="2"/>
-                   <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                 </svg>`),
+            icon: "https://mehiskasonen.github.io/chromodynamic-fog/capture.svg",
             label: "Capture vision settings",
             filter: { every: [{ key: "layer", value: "CHARACTER" }] },
         }],
