@@ -49,12 +49,15 @@ const OWNER_META_KEY = `${EXTENSION_ID}/ownerId`;
 const LIGHT_TAG_KEY = `${EXTENSION_ID}/lightFor`; // marks lights we own
 const PARAMS_META_KEY = `${EXTENSION_ID}/lightParams`;
 const DEFAULT_VISION_GRID_SQUARES = 8;            // ~40 ft on a 5-ft grid
-const GM_SEES_ALL = false;                         // GMs reveal from all tokens
 
 /* ----- Runtime state (LOCAL to this browser tab only) ---------------------*/
 
 let myPlayerId = null;       // OBR.player.getId() result for THIS client
 let myRole = "PLAYER";       // "GM" or "PLAYER"
+// GM-only viewing mode. Values: "self" | "party" | "player:<playerId>"
+// Lives in-memory on the GM's client — never written to shared scene, never
+// visible to other players. Switching modes just triggers a local reconcile.
+let gmViewMode = "self";
 let gridDpi = 150;           // pixels per grid square, cached from OBR.scene.grid
 let visionRadiusPx = 0;      // computed from grid dpi * DEFAULT_VISION_GRID_SQUARES
 
@@ -106,19 +109,25 @@ async function initSceneState() {
  * write into the LOCAL scene.
  */
 function isOwnedByMe(item) {
-    // Must be a token-like thing. Filter aggressively to avoid attaching
-    // lights to maps, props, walls, drawings, etc.
     if (!isImage(item)) return false;
     if (item.layer !== "CHARACTER") return false;
 
-    // GM override — GMs can be allowed to see through every token.
-    if (GM_SEES_ALL && myRole === "GM") return true;
+    // GM viewing mode overrides. Only applies when this client is the GM.
+    if (myRole === "GM") {
+        if (gmViewMode === "party") {
+            // Combined party vision — show vision from every tagged token.
+            // Untagged NPC tokens still don't contribute.
+            return item.metadata?.[OWNER_META_KEY] != null;
+        }
+        if (gmViewMode.startsWith("player:")) {
+            const targetId = gmViewMode.slice("player:".length);
+            return item.metadata?.[OWNER_META_KEY] === targetId;
+        }
+        // "self" mode falls through to the normal self-ownership check below.
+    }
 
-    // Explicit ownership tag set via context menu / character-sheet extension.
     const taggedOwner = item.metadata?.[OWNER_META_KEY];
     if (taggedOwner && taggedOwner === myPlayerId) return true;
-
-    // Fallback: the token was dropped onto the map by this player.
     if (item.createdUserId === myPlayerId) return true;
 
     return false;
@@ -192,6 +201,12 @@ function buildLocalLight(token, params) {
  */
 function paramsHash(p) {
     return JSON.stringify(p);
+}
+
+// Re-run reconcile against the current scene. Called when gmViewMode changes.
+async function recomputeLocalVision() {
+    const items = await OBR.scene.items.getItems();
+    await reconcileLights(items);
 }
 
 /**
