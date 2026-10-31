@@ -48,6 +48,7 @@ import OBR, {
 const EXTENSION_ID = "com.example.chromofog";
 const OWNER_META_KEY = `${EXTENSION_ID}/ownerId`;
 const LIGHT_TAG_KEY = `${EXTENSION_ID}/lightFor`; // marks lights we own
+const PARAMS_META_KEY = `${EXTENSION_ID}/lightParams`;
 const DEFAULT_VISION_GRID_SQUARES = 8;            // ~40 ft on a 5-ft grid
 const GM_SEES_ALL = false;                         // GMs reveal from all tokens
 
