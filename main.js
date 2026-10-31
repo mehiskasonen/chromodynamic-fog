@@ -40,7 +40,6 @@
 import OBR, {
     buildLight,
     isImage, // tokens in OBR are typically Image items on the CHARACTER layer
-    isLight,
 } from "https://esm.sh/@owlbear-rodeo/sdk@3";
 
 /* ----- Configuration -------------------------------------------------------*/
@@ -143,23 +142,6 @@ function findAttachedLight(allItems, tokenId) {
 }
 
 /**
- * Extract the visual parameters from a shared Light item. These are the
- * exact knobs the Dynamic Fog "Light Settings" panel manipulates.
- * Any property that's undefined on the source light is left out so the
- * builder uses the SDK default.
- */
-function extractParams(light) {
-    return {
-        attenuationRadius: light.attenuationRadius,
-        sourceRadius:      light.sourceRadius,
-        falloff:           light.falloff,
-        innerAngle:        light.innerAngle,
-        outerAngle:        light.outerAngle,
-        lightType:         light.lightType,
-    };
-}
-
-/**
  * Used when a token has no Dynamic Fog light attached. Keeps the extension
  * functional even if you forget to add a light via Dynamic Fog's UI.
  */
@@ -171,21 +153,22 @@ function defaultParams() {
     };
 }
 
+const DF_LIGHT_META_KEY = "rodeo.owlbear.dynamic-fog/light";
+
 /**
  * Determine which params to use for a token's local light.
- * Precedence: live Dynamic Fog light > captured snapshot > extension defaults.
+ * Precedence: our captured snapshot > live Dynamic Fog metadata > defaults.
  *
- * The Dynamic Fog light "wins" when it exists so that adjusting sliders in
- * Dynamic Fog's panel updates the local light in real time during editing.
- * Once the GM is happy and runs "Capture vision settings", the DF light is
- * deleted and we fall through to the snapshot — no more shared broadcast.
+ * Our snapshot wins when present because capture explicitly moves the config
+ * out of DF's namespace, which stops DF from rendering a shared light for
+ * that token — the whole point of per-player isolation.
  */
-function paramsForToken(token, allItems) {
-    const dfLight = findAttachedLight(allItems, token.id);
-    if (dfLight) return extractParams(dfLight);
+function paramsForToken(token) {
+    const captured = token.metadata?.[PARAMS_META_KEY];
+    if (captured) return captured;
 
-    const snapshot = token.metadata?.[PARAMS_META_KEY];
-    if (snapshot) return snapshot;
+    const dfLive = token.metadata?.[DF_LIGHT_META_KEY];
+    if (dfLive) return dfLive;
 
     return defaultParams();
 }
@@ -245,7 +228,7 @@ async function reconcileLights(allItems) {
     //    the params our existing local light WAS built with, rebuild on mismatch.
     for (const token of myTokens) {
         const dfLight = findAttachedLight(allItems, token.id);
-        const wanted  = paramsForToken(token, allItems);
+        const wanted  = paramsForToken(token);
         const hash    = paramsHash(wanted);
 
         const existing = tokenToLight.get(token.id);
@@ -305,78 +288,38 @@ OBR.onReady(async () => {
             filter: { every: [{ key: "layer", value: "CHARACTER" }] },
         }],
         onClick: async (context) => {
-            const allItems = await OBR.scene.items.getItems();
-
-            const diagnostic = {
-                timestamp: new Date().toISOString(),
-                selectedTokens: context.items,
-                allItemTypes: [...new Set(allItems.map(i => i.type))],
-                allLightItems: allItems.filter(i => i.type === "LIGHT"),
-                selectedTokenMetadata: context.items.map(t => ({
-                    id: t.id,
-                    name: t.name,
-                    metadata: t.metadata,
-                })),
-                itemsAttachedToSelected: allItems.filter(i =>
-                    context.items.some(t => i.attachedTo === t.id)
-                ),
-                // Also include a dump of every item near our tokens, in case the "attachment"
-                // relationship is spatial rather than by ID.
-                allItemsNearSelected: allItems.filter(i => {
-                    if (!i.position) return false;
-                    return context.items.some(t => {
-                        const dx = i.position.x - t.position.x;
-                        const dy = i.position.y - t.position.y;
-                        return Math.sqrt(dx*dx + dy*dy) < 500;
-                    });
-                }),
-            };
-            
-            const blob = new Blob(
-                [JSON.stringify(diagnostic, null, 2)],
-                { type: "application/json" }
+            // Find which selected tokens actually have a Dynamic Fog light to capture.
+            const toCapture = context.items.filter(
+                t => t.metadata?.[DF_LIGHT_META_KEY]
             );
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = `obr-diagnostic-${Date.now()}.json`;
-            a.click();
-            URL.revokeObjectURL(url);
-
-            const captures = [];
-            for (const token of context.items) {
-                const dfLight = findAttachedLight(allItems, token.id);
-                if (dfLight) {
-                    captures.push({
-                        tokenId: token.id,
-                        lightId: dfLight.id,
-                        params:  extractParams(dfLight),
-                    });
-                }
-            }
-
-            if (captures.length === 0) {
+        
+            if (toCapture.length === 0) {
                 await OBR.notification.show(
                     "No Dynamic Fog light on the selected token(s) to capture.",
                     "WARNING"
                 );
                 return;
             }
-
+        
+            // Move the DF metadata into our namespace in a single atomic update:
+            // read DF's config, write it under our key, delete DF's key. Once DF's
+            // key is gone, Dynamic Fog stops rendering a shared light for that
+            // token — only our per-player local light remains.
             await OBR.scene.items.updateItems(
-                captures.map(c => c.tokenId),
+                toCapture.map(t => t.id),
                 (items) => {
                     for (const item of items) {
-                        const cap = captures.find(c => c.tokenId === item.id);
-                        if (cap) item.metadata[PARAMS_META_KEY] = cap.params;
+                        const dfConfig = item.metadata[DF_LIGHT_META_KEY];
+                        if (dfConfig) {
+                            item.metadata[PARAMS_META_KEY] = dfConfig;
+                            delete item.metadata[DF_LIGHT_META_KEY];
+                        }
                     }
                 }
             );
-
-            await OBR.scene.items.deleteItems(captures.map(c => c.lightId));
-
+        
             await OBR.notification.show(
-                `Captured vision for ${captures.length} token(s).`,
+                `Captured vision for ${toCapture.length} token(s).`,
                 "SUCCESS"
             );
         },
