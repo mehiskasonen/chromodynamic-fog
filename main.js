@@ -307,16 +307,41 @@ OBR.onReady(async () => {
         onClick: async (context) => {
             const allItems = await OBR.scene.items.getItems();
 
-            console.log("=== DIAGNOSTIC: capture clicked ===");
-            console.log("Selected tokens:", context.items);
-            console.log("All item types in scene:",
-                [...new Set(allItems.map(i => i.type))]);
-            console.log("All LIGHT items:",
-                allItems.filter(i => i.type === "LIGHT"));
-            console.log("Selected token metadata:",
-                context.items.map(t => ({ id: t.id, metadata: t.metadata })));
-            console.log("Items whose attachedTo matches a selected token:",
-                allItems.filter(i => context.items.some(t => i.attachedTo === t.id)));
+            const diagnostic = {
+                timestamp: new Date().toISOString(),
+                selectedTokens: context.items,
+                allItemTypes: [...new Set(allItems.map(i => i.type))],
+                allLightItems: allItems.filter(i => i.type === "LIGHT"),
+                selectedTokenMetadata: context.items.map(t => ({
+                    id: t.id,
+                    name: t.name,
+                    metadata: t.metadata,
+                })),
+                itemsAttachedToSelected: allItems.filter(i =>
+                    context.items.some(t => i.attachedTo === t.id)
+                ),
+                // Also include a dump of every item near our tokens, in case the "attachment"
+                // relationship is spatial rather than by ID.
+                allItemsNearSelected: allItems.filter(i => {
+                    if (!i.position) return false;
+                    return context.items.some(t => {
+                        const dx = i.position.x - t.position.x;
+                        const dy = i.position.y - t.position.y;
+                        return Math.sqrt(dx*dx + dy*dy) < 500;
+                    });
+                }),
+            };
+            
+            const blob = new Blob(
+                [JSON.stringify(diagnostic, null, 2)],
+                { type: "application/json" }
+            );
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `obr-diagnostic-${Date.now()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
 
             const captures = [];
             for (const token of context.items) {
