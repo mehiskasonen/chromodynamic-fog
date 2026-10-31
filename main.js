@@ -172,6 +172,25 @@ function defaultParams() {
 }
 
 /**
+ * Determine which params to use for a token's local light.
+ * Precedence: live Dynamic Fog light > captured snapshot > extension defaults.
+ *
+ * The Dynamic Fog light "wins" when it exists so that adjusting sliders in
+ * Dynamic Fog's panel updates the local light in real time during editing.
+ * Once the GM is happy and runs "Capture vision settings", the DF light is
+ * deleted and we fall through to the snapshot — no more shared broadcast.
+ */
+function paramsForToken(token, allItems) {
+    const dfLight = findAttachedLight(allItems, token.id);
+    if (dfLight) return extractParams(dfLight);
+
+    const snapshot = token.metadata?.[PARAMS_META_KEY];
+    if (snapshot) return snapshot;
+
+    return defaultParams();
+}
+
+/**
  * Build a local OBR Light from a params object. Properties not present in
  * the params (e.g. innerAngle on a full-circle light) are simply omitted,
  * leaving the SDK to apply defaults.
@@ -226,7 +245,7 @@ async function reconcileLights(allItems) {
     //    the params our existing local light WAS built with, rebuild on mismatch.
     for (const token of myTokens) {
         const dfLight = findAttachedLight(allItems, token.id);
-        const wanted  = dfLight ? extractParams(dfLight) : defaultParams();
+        const wanted  = paramsForToken(token, allItems);
         const hash    = paramsHash(wanted);
 
         const existing = tokenToLight.get(token.id);
@@ -249,16 +268,21 @@ async function clearAllLocalLights() {
     tokenToLight.clear();
 }
 
-/* ----- Optional: context-menu hook to assign explicit ownership -----------
+/* ----- GM-only context menu hooks -----------------------------------------
  *
- * GMs can right-click a token and assign it to a specific player. The
- * assignment is written to shared metadata so every client's copy of this
- * extension can read it — but the actual vision render still happens only
- * in the assigned player's local scene.
+ * Two actions:
+ *   1. Assign vision owner — tag a token as belonging to a specific player,
+ *      so that player's client renders a local vision light for it.
+ *   2. Capture vision settings — snapshot the currently-attached Dynamic Fog
+ *      light's params into token metadata, then delete the shared DF light so
+ *      it no longer broadcasts vision to everyone. Our local lights continue
+ *      rendering, reading from the captured snapshot.
  * -------------------------------------------------------------------------*/
 
 OBR.onReady(async () => {
     if ((await OBR.player.getRole()) !== "GM") return;
+
+    // --- 1. Assign vision owner ------------------------------------------
     OBR.contextMenu.create({
         id: `${EXTENSION_ID}/assign-owner`,
         icons: [{
@@ -269,6 +293,60 @@ OBR.onReady(async () => {
         embed: {
             url: `https://mehiskasonen.github.io/chromodynamic-fog/assign.html`,
             height: 320,
+        },
+    });
+
+    // --- 2. Capture Dynamic Fog settings into token metadata -------------
+    OBR.contextMenu.create({
+        id: `${EXTENSION_ID}/capture-light`,
+        icons: [{
+            icon: "data:image/svg+xml;utf8," + encodeURIComponent(
+                `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                   <rect x="3" y="11" width="18" height="11" rx="2"/>
+                   <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                 </svg>`),
+            label: "Capture vision settings",
+            filter: { every: [{ key: "layer", value: "CHARACTER" }] },
+        }],
+        onClick: async (context) => {
+            const allItems = await OBR.scene.items.getItems();
+
+            const captures = [];
+            for (const token of context.items) {
+                const dfLight = findAttachedLight(allItems, token.id);
+                if (dfLight) {
+                    captures.push({
+                        tokenId: token.id,
+                        lightId: dfLight.id,
+                        params:  extractParams(dfLight),
+                    });
+                }
+            }
+
+            if (captures.length === 0) {
+                await OBR.notification.show(
+                    "No Dynamic Fog light on the selected token(s) to capture.",
+                    "WARNING"
+                );
+                return;
+            }
+
+            await OBR.scene.items.updateItems(
+                captures.map(c => c.tokenId),
+                (items) => {
+                    for (const item of items) {
+                        const cap = captures.find(c => c.tokenId === item.id);
+                        if (cap) item.metadata[PARAMS_META_KEY] = cap.params;
+                    }
+                }
+            );
+
+            await OBR.scene.items.deleteItems(captures.map(c => c.lightId));
+
+            await OBR.notification.show(
+                `Captured vision for ${captures.length} token(s).`,
+                "SUCCESS"
+            );
         },
     });
 });
