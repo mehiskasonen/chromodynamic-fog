@@ -307,6 +307,17 @@ OBR.onReady(async () => {
         onClick: async (context) => {
             const allItems = await OBR.scene.items.getItems();
 
+            console.log("=== DIAGNOSTIC: capture clicked ===");
+            console.log("Selected tokens:", context.items);
+            console.log("All item types in scene:",
+                [...new Set(allItems.map(i => i.type))]);
+            console.log("All LIGHT items:",
+                allItems.filter(i => i.type === "LIGHT"));
+            console.log("Selected token metadata:",
+                context.items.map(t => ({ id: t.id, metadata: t.metadata })));
+            console.log("Items whose attachedTo matches a selected token:",
+                allItems.filter(i => context.items.some(t => i.attachedTo === t.id)));
+
             const captures = [];
             for (const token of context.items) {
                 const dfLight = findAttachedLight(allItems, token.id);
